@@ -9,6 +9,9 @@ class Species:
         self.high_T = high_T
         self.a_low = a_low
         self.a_high = a_high
+
+R = 8.31
+        
         
 def readinpfile(inppath):
     """read input parameters from equilib.inp"""
@@ -19,18 +22,18 @@ def readinpfile(inppath):
                     continue
                 if line.strip() == 'MIXTURE':
                     break
-                if line.split()[1]=='T1': T1 = float(line.split()[0])
-                if line.split()[1]=='P1': P1 = float(line.split()[0])
+                if line.split()[1]=='T0': T0 = 273+float(line.split()[0])
+                if line.split()[1]=='P0': P0 = float(line.split()[0])
                 if line.split()[1]=='dt': dt = float(line.split()[0])
                 if line.split()[1]=='L': L = float(line.split()[0])
-        u1 = L/dt
+        u_isw = 1e3*L/dt
         composition = []
         while True:
                 line = inpfile.readline()              
                 if line == '':
                     break
                 composition.append([line.split()[0], float(line.split()[1])])
-        return T1, P1, u1, composition
+        return T0, P0, u_isw, composition
         
 def readlist(thermpath):
     """makes list of available gaseous species from therm.dat"""
@@ -40,7 +43,7 @@ def readlist(thermpath):
             line = thermdat.readline()
             if len(line) >= 80:
                 if line[79] == '1' and line [44] == 'G':
-                    specset.add(line[:18].strip())                  
+                    specset.add(line[:18].split()[0])                  
             if line == '':
                 break
     thermdat.closed
@@ -63,20 +66,19 @@ def weightcalc(stringofelements):
  
 def read_thermodat(composition, file):
     """read thermodynamical properties of mixture"""
-    mixset = set()
+    mixture = []
     for i in range(len(composition)):
-        mixset.add(composition[i][0])
-    thermdat = open('therm.dat', 'r')                       #инициализировать mixture
-    for i in range(len(composition)):
+        thermdat = open('therm.dat', 'r')
         while True:
             line = thermdat.readline()                   #1st line
-            if line[:18].strip() in mixset:                         ####!!!
+            if line[:18].split()[0] == composition[i][0]:
                 break			
-        name = line[:18].strip()
+        name = composition[i][0]
+        molefrac = 0.01*composition[i][1]
         weight = weightcalc(line[24:45])                #weight from elements
-        low_T = line[45:55]
-        threeshold_T = line[55:65]
-        high_T = line[65:73]
+        low_T = float(line[45:55])
+        high_T = float(line[55:65])
+        threeshold_T = float(line[65:73])
         a_high = [0,0,0,0,0,0,0]
         a_low = [0,0,0,0,0,0,0]
         line = thermdat.readline() 						#2nd line
@@ -96,22 +98,108 @@ def read_thermodat(composition, file):
         a_low[4] = float(line[15:30])
         a_low[5] = float(line[30:45])
         a_low[6] = float(line[45:60])
-        print(a_low[5])
-        print(len(composition))
+        component = Species(name, molefrac, weight, low_T, threeshold_T,  high_T, a_low, a_high)
+        mixture.append(component)
     return mixture
 
-weight = weightcalc('C   2H   2AL  1H   10')
-print(weight)
+def Cp_calc(mixture, T):
+    """heat capacity of given mixture at given T"""
+    Cp = 0.0
+    for i in range(len(mixture)):
+        if T <= mixture[i].threeshold_T:
+            (a1, a2, a3, a4, a5) = mixture[i].a_low[:5]
+        else:
+            (a1, a2, a3, a4, a5) = mixture[i].a_high[:5]
+        Cp = Cp + mixture[i].molefrac*(R*(a1+a2*T+a3*T**2+a4*T**3+a5*T**4))
+    return Cp
 
+def gamma(mixture, T):
+    """gamma of given mixture at given T"""
+    Cp = Cp_calc(mixture, T)
+    gamma = Cp/(Cp-R)
+    return gamma
+    
+def enthalpy(mixture, T):
+    """enthalpy of given mixture at given T"""
+    H = 0.0
+    for i in range(len(mixture)):
+        if T <= mixture[i].threeshold_T:
+            (a1, a2, a3, a4, a5, a6) = mixture[i].a_low[:6]
+        else:
+            (a1, a2, a3, a4, a5, a6) = mixture[i].a_high[:6]
+        H = H + mixture[i].molefrac*(R*(a1*T+(a2/2)*T**2+(a3/3)*T**3+(a4/4)*T**4+(a5/5)*T**5+a6))
+    return H
+    
+def T_from_enthalpy(mixture, H):
+    """T corresponding given enthalpy of given mixture"""
+    T = 250
+    dT = 200
+    sign = 1
+    while abs(H-enthalpy(mixture, T)) >= 0.1:
+        if H-enthalpy(mixture, T) > 0:
+            if sign == -1:
+               sign = 1
+               dT = dT/2
+            T = T + dT               
+        else:
+            if sign == 1:
+               sign = -1
+               dT = dT/2
+            T = T - dT
+    return T
+    
+def mixweight(mixture):
+    weight = 0
+    for i in range(len(mixture)):
+        weight = weight + mixture[i].molefrac*mixture[i].weight
+    return weight
+
+def ISW(mixture, P0, T0, u_isw):
+    gamma0 = gamma(mixture, T0)
+    weight = mixweight(mixture)/1000
+    a0 = (gamma0*T0*R/weight)**0.5;
+    M_isw = u_isw/a0;
+    rratio_isw = (gamma0+1)/(gamma0-1)
+    Pa, Pb = 1, 2
+    js = 1
+    dr = 0.01*rratio_isw;
+    print(enthalpy(mixture, T0))
+    while abs(Pa-Pb)>=1E-5:
+        print(u_isw)
+        H2 = enthalpy(mixture, T0)+(0.5*u_isw**2*(1-(1/rratio_isw)**2))*weight
+        print(H2)
+        T_isw = T_from_enthalpy(mixture, H2)
+        print(H2, T_isw)
+        Pa = rratio_isw*T_isw/T0
+        Pb = 1+(u_isw**2*weight/(T0*R))*(1-1/rratio_isw);
+        if ((Pa>Pb) and (js<0)) or ((Pa<Pb) and (js>0)):
+            dr = dr/10
+            js = -js
+        if Pa < Pb:
+            rratio_isw = rratio_isw + dr
+        else:
+            rratio_isw = rratio_isw - dr  
+                    
+    Pratio=0.5*(Pa+Pb)
+    P_isw = P0*Pratio
+    
+    return P_isw,T_isw, u_isw, M_isw, rratio_isw
+            
+    
+    
 specset = readlist('therm.dat')
-print(specset)
 
-(T1, P1, u1, composition) = readinpfile('equilib.inp')
+(T0, P0, u_isw, composition) = readinpfile('equilib.inp')
 print(composition)
-print(T1)
-print(P1)
-print(u1)
+print(T0)
+print(P0)
+print(u_isw)
 
 mixture = read_thermodat(composition, 'therm.dat')
 
-print(mixture)
+(P_isw,T_isw, u_isw, M_isw, rratio_isw) = ISW(mixture, P0, T0, u_isw)
+
+print(P_isw, T_isw, u_isw, M_isw, rratio_isw)
+
+
+
