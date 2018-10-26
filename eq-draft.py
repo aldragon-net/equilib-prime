@@ -10,7 +10,7 @@ class Species:
         self.a_low = a_low
         self.a_high = a_high
 
-R = 8.31
+R = 8.31446 #ideal gas constant
         
         
 def readinpfile(inppath):
@@ -22,7 +22,7 @@ def readinpfile(inppath):
                     continue
                 if line.strip() == 'MIXTURE':
                     break
-                if line.split()[1]=='T0': T0 = 273+float(line.split()[0])
+                if line.split()[1]=='T0': T0 = 273.15+float(line.split()[0])
                 if line.split()[1]=='P0': P0 = float(line.split()[0])
                 if line.split()[1]=='dt': dt = float(line.split()[0])
                 if line.split()[1]=='L': L = float(line.split()[0])
@@ -135,7 +135,7 @@ def T_from_enthalpy(mixture, H):
     T = 250
     dT = 200
     sign = 1
-    while abs(H-enthalpy(mixture, T)) >= 0.1:
+    while abs(H-enthalpy(mixture, T)) >= 0.01:
         if H-enthalpy(mixture, T) > 0:
             if sign == -1:
                sign = 1
@@ -155,25 +155,23 @@ def mixweight(mixture):
     return weight
 
 def ISW(mixture, P0, T0, u_isw):
-    gamma0 = gamma(mixture, T0)
+    """parameters behind incident wave"""
+    gamma1 = gamma(mixture, T0)
     weight = mixweight(mixture)/1000
-    a0 = (gamma0*T0*R/weight)**0.5;
+    a0 = (gamma1*T0*R/weight)**0.5;
     M_isw = u_isw/a0;
-    rratio_isw = (gamma0+1)/(gamma0-1)
+    rratio_isw = (gamma1+1)/(gamma1-1)
     Pa, Pb = 1, 2
     js = 1
     dr = 0.01*rratio_isw;
     print(enthalpy(mixture, T0))
-    while abs(Pa-Pb)>=1E-5:
-        print(u_isw)
+    while abs(Pa-Pb)>=1E-8:
         H2 = enthalpy(mixture, T0)+(0.5*u_isw**2*(1-(1/rratio_isw)**2))*weight
-        print(H2)
         T_isw = T_from_enthalpy(mixture, H2)
-        print(H2, T_isw)
         Pa = rratio_isw*T_isw/T0
         Pb = 1+(u_isw**2*weight/(T0*R))*(1-1/rratio_isw);
         if ((Pa>Pb) and (js<0)) or ((Pa<Pb) and (js>0)):
-            dr = dr/10
+            dr = dr/4
             js = -js
         if Pa < Pb:
             rratio_isw = rratio_isw + dr
@@ -184,22 +182,47 @@ def ISW(mixture, P0, T0, u_isw):
     P_isw = P0*Pratio
     
     return P_isw,T_isw, u_isw, M_isw, rratio_isw
+    
+    
+def RSW(mixture, T0, P0, u_isw, T_isw):
+    """parameters behind reflected wave"""
+    gamma1 = gamma(mixture, T0)
+    weight = mixweight(mixture)/1000
+    a1 = (gamma1*T0*R/weight)**0.5;
+    print ('a1=', a1, gamma1, T0, R, weight)
+    M_isw = u_isw/a1;
+    Ta = T0*(2*(gamma1-1)*M_isw**2+3-gamma1)*(M_isw**2*(3*gamma1-1)-2*gamma1+2)/((gamma1+1)*M_isw)**2
+    Tb = T_isw
+    dT = 1
+    js = 1
+    H2 = enthalpy(mixture, T_isw)
+    while abs(Ta-Tb)>=1E-5:
+        H5 = enthalpy(mixture, Ta)
+        s0 = 0.5*(u_isw*(1-1/rratio_isw))**2
+        s1 = (H5-H2)/weight
+        Tb = (s1-s0)*(T_isw/(s1+s0)+weight/R)
+        if ((Ta>Tb) and (js<0)) or ((Ta<Tb) and (js>0)):
+            dT = dT/10
+            js = -js
+        if Ta > Tb:
+            Ta = Ta + dT
+        else:
+            Ta = Ta - dT
+    T_rsw = 0.5*(Ta+Tb);
+    rratio_rsw = (s1+s0)/(s1-s0);
+    P_rsw = P0*rratio_rsw*rratio_isw*T_rsw/T0
+    u_rsw = u_isw*(1-1/rratio_isw)/(1-1/rratio_rsw)
+    u_rsw_lab = u_rsw - u_isw*(1-1/rratio_isw)
+    return P_rsw, T_rsw, rratio_rsw, u_rsw_lab
             
     
-    
 specset = readlist('therm.dat')
-
 (T0, P0, u_isw, composition) = readinpfile('equilib.inp')
-print(composition)
-print(T0)
-print(P0)
-print(u_isw)
-
 mixture = read_thermodat(composition, 'therm.dat')
-
 (P_isw,T_isw, u_isw, M_isw, rratio_isw) = ISW(mixture, P0, T0, u_isw)
+(P_rsw,T_rsw, rratio_rsw, u_rsw_lab) = RSW(mixture, T0, P0, u_isw, T_isw)
 
-print(P_isw, T_isw, u_isw, M_isw, rratio_isw)
-
+print('ISW:', P_isw, T_isw, u_isw, M_isw, rratio_isw)
+print('RSW:', P_rsw, T_rsw, rratio_rsw, u_rsw_lab)
 
 
