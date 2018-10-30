@@ -331,6 +331,9 @@ M_rsw_label = StringVar()
 n_rsw_label = StringVar()
 rratio_rsw_label = StringVar()
 status_label = StringVar()
+flag_color = StringVar()
+
+flag_color.set('black')
 
 ttk.Label(mainframe, textvariable=T_isw_label, font=majFont).grid(column=5, row=2, rowspan =2,  sticky=W)
 ttk.Label(mainframe, textvariable=P_isw_label, font=majFont).grid(column=5, row=4, sticky=W)
@@ -361,7 +364,7 @@ statusbar = ttk.Frame(mainframe, borderwidth=0, relief='sunken', padding="2 0 0 
 statusbar.grid(column=5, columnspan=3, row=13, sticky=(W,N,S,E))
 statusbar.columnconfigure(0, weight=1)
 statusbar.rowconfigure(0, weight=1)
-ttk.Label(statusbar, textvariable=status_label).grid(column=0, row=0, sticky=W)
+ttk.Label(statusbar, textvariable=status_label).grid(column=0, row=0)
 #end of interface initialization
 
 def input_rewrite(T1, P1, dt, L, u_isw, composition):
@@ -412,6 +415,7 @@ def closeapp(event, *args):
     return
     
 def change_flag(event, *args):
+    flag_color.set('red')
     status_label.set('Input changed. Press Ctrl+Enter to recalculate')
     return
 
