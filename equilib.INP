@@ -1,8 +1,8 @@
 20      T0 [C]
-0.109   P0 [bar]
-85      dt [microseconds]
+0.121   P0 [bar]
+88      dt [microseconds]
 94      L  [millimeters]
 
 MIXTURE
-AR      90
-C2H2    10
+AR      80
+C2H2    20
