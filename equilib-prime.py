@@ -41,8 +41,8 @@ def readinpfile(inppath):
                     continue
                 if line.strip() == 'MIXTURE':
                     break
-                if line.split()[1]=='T0': T1 = 273.15+float(line.split()[0])
-                if line.split()[1]=='P0': P1 = float(line.split()[0])
+                if line.split()[1]=='T1': T1 = 273.15+float(line.split()[0])
+                if line.split()[1]=='P1': P1 = 0.001*float(line.split()[0])
                 if line.split()[1]=='dt': dt = float(line.split()[0])
                 if line.split()[1]=='L': L = float(line.split()[0])
         inpfile.closed
@@ -168,8 +168,7 @@ def ISW(mixture, P0, T0, u_isw):
     Pa, Pb = 1, 2
     js = 1
     dr = 0.01*rratio_isw;
-    print(enthalpy(mixture, T0))
-    while abs(Pa-Pb)>=1E-8:
+    while abs(Pa-Pb)>=5E-6:
         H2 = enthalpy(mixture, T0)+(0.5*u_isw**2*(1-(1/rratio_isw)**2))*weight
         T_isw = T_from_enthalpy(mixture, H2)
         Pa = rratio_isw*T_isw/T0
@@ -179,7 +178,7 @@ def ISW(mixture, P0, T0, u_isw):
             js = -js
         if Pa < Pb:
             rratio_isw = rratio_isw + dr
-        else:
+        elif not (Pa==Pb):
             rratio_isw = rratio_isw - dr               
     Pratio=0.5*(Pa+Pb)
     P_isw = P0*Pratio
@@ -190,18 +189,19 @@ def ISW(mixture, P0, T0, u_isw):
     return T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw
     
     
-def RSW(mixture, T0, P0, u_isw, T_isw):
+def RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw):
     """parameters behind reflected wave"""
-    gamma1 = gamma(mixture, T0)
+    gamma1 = gamma(mixture, T1)
     weight = mixweight(mixture)/1000
-    a1 = (gamma1*T0*R/weight)**0.5;
-    print ('a1=', a1, gamma1, T0, R, weight)
+    a1 = (gamma1*T1*R/weight)**0.5;
+    print ('a1=', a1, gamma1, T1, R, weight)
     M_isw = u_isw/a1;
-    Ta = T0*(2*(gamma1-1)*M_isw**2+3-gamma1)*(M_isw**2*(3*gamma1-1)-2*gamma1+2)/((gamma1+1)*M_isw)**2
+    Ta = T1*(2*(gamma1-1)*M_isw**2+3-gamma1)*(M_isw**2*(3*gamma1-1)-2*gamma1+2)/((gamma1+1)*M_isw)**2
     Tb = T_isw
     dT = 1
     js = 1
     H2 = enthalpy(mixture, T_isw)
+    print(T_isw, P_isw)
     while abs(Ta-Tb)>=1E-5:
         H5 = enthalpy(mixture, Ta)
         s0 = 0.5*(u_isw*(1-1/rratio_isw))**2
@@ -216,7 +216,7 @@ def RSW(mixture, T0, P0, u_isw, T_isw):
             Ta = Ta - dT
     T_rsw = 0.5*(Ta+Tb);
     rratio_rsw = (s1+s0)/(s1-s0);
-    P_rsw = P0*rratio_rsw*rratio_isw*T_rsw/T0
+    P_rsw = P1*rratio_rsw*rratio_isw*T_rsw/T1
     n_rsw = (P_rsw*1e-1)/(k*T_rsw)  #bar to Pa, m3 to cm3 => 0.1 factor
     u_rsw_self = u_isw*(1-1/rratio_isw)/(1-1/rratio_rsw)
     u_rsw_lab = u_rsw_self - u_isw*(1-1/rratio_isw)
@@ -332,6 +332,7 @@ n_rsw_label = StringVar()
 rratio_rsw_label = StringVar()
 status_label = StringVar()
 flag_color = StringVar()
+N_exp_label = StringVar()
 
 flag_color.set('black')
 
@@ -365,7 +366,28 @@ statusbar.grid(column=5, columnspan=3, row=13, sticky=(W,N,S,E))
 statusbar.columnconfigure(0, weight=1)
 statusbar.rowconfigure(0, weight=1)
 ttk.Label(statusbar, textvariable=status_label).grid(column=0, row=0)
+ttk.Label(statusbar, text='N = ').grid(column=1, row=0)
+N_exp_entry = ttk.Entry(statusbar, width=4, textvariable=N_exp_label)
+N_exp_entry.grid(column=2, row=0, sticky=(E))
+
 #end of interface initialization
+
+def input_file_write(inppath, T1, P1, dt, L, u_isw, composition):
+    """writes input parameters to equilib.inp"""
+    with open(inppath, 'w') as inpfile:
+        inpfile.write(str(T1-273.15) + '\tT1 [C]'+'\n')
+        inpfile.write(str(P1*1000) + '\tP1 [mbar]'+'\n')
+        inpfile.write(str(dt) + '\tdt [mks]'+'\n')
+        inpfile.write(str(L) + '\tL [mm]'+'\n')
+        inpfile.write('\n')
+        inpfile.write('MIXTURE'+'\n')
+        for i in range(len(composition)):
+            if i+1 < len(composition):
+                inpfile.write(composition[i][0] + '\t' + str(composition[i][1])+'\n')
+            else:
+                inpfile.write(composition[i][0]+ '\t' + str(composition[i][1]))
+    inpfile.close()
+    return
 
 def input_rewrite(T1, P1, dt, L, u_isw, composition):
     """write input labels from file"""
@@ -419,6 +441,48 @@ def change_flag(event, *args):
     status_label.set('Input changed. Press Ctrl+Enter to recalculate')
     return
 
+def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac):
+    """read input parameters from GUI"""
+    T1 = 273.15+float(T1_label.get())
+    P1 = 0.001*float(P1_label.get())
+    if not (dt_label.get()==''):
+        dt = float(dt_label.get())
+    if not (L_label.get()==''):
+        L = float(L_label.get())
+    if not (u_label.get()==''):
+        u_isw = float(u_label.get())
+    else:
+        u_isw = 1e3*L/dt
+    composition = []
+    for i in range(4):
+        if not (spec[i].get()==''):
+            composition.append([spec[i].get(), float(frac[i].get())])
+    return T1, P1, dt, L, u_isw, composition
+
+
+
+def restart(event, *args):
+    T1, P1, dt, L, u_isw, composition = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+    input_rewrite(T1, P1, dt, L, u_isw, composition)
+    mixture = read_thermodat(composition, 'therm.dat')
+    (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
+    (T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
+
+    output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
+              T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw)
+
+    print(T_rsw)
+
+    input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
+    status_label.set('status: new')
+    print(composition, mixture[2].name, mixture[2].molefrac)
+    return
+
+#def launch(event):
+    
+
+
+
 #mainbody start
 
 specset = readlist('therm.dat')
@@ -426,18 +490,38 @@ specset = readlist('therm.dat')
 
 input_rewrite(T1, P1, dt, L, u_isw, composition)
 
+T1, P1, dt, L, u_isw, composition = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+
 mixture = read_thermodat(composition, 'therm.dat')
 (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
-(T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw) = RSW(mixture, T1, P1, u_isw, T_isw)
+(T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
 
 output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
               T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw)
 
-P1_label.trace("w", change_flag)
-root.bind("<Escape>", closeapp)
+input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
 
-root.update()
-root.minsize(root.winfo_width(), root.winfo_height())
+P1_label.trace("w", change_flag)
+T1_label.trace("w", change_flag)
+L_label.trace("w", change_flag)
+dt_label.trace("w", change_flag)
+u_label.trace("w", change_flag)
+spec[0].trace("w", change_flag)
+frac[0].trace("w", change_flag)
+spec[1].trace("w", change_flag)
+frac[1].trace("w", change_flag)
+spec[2].trace("w", change_flag)
+frac[2].trace("w", change_flag)
+spec[3].trace("w", change_flag)
+frac[3].trace("w", change_flag)
+spec[4].trace("w", change_flag)
+frac[4].trace("w", change_flag)
+P1_label.trace("w", change_flag)
+
+root.bind("<Escape>", restart)
+
+#root.update()
+#root.minsize(root.winfo_width(), root.winfo_height())
 
 root.mainloop()
 
