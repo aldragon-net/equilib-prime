@@ -35,6 +35,7 @@ def readlist(thermpath):
 def readinpfile(inppath):
     """read input parameters from equilib.inp"""
     with open(inppath, 'r') as inpfile:
+        u = 0
         while True:
                 line = inpfile.readline()
                 if line.strip() == '':
@@ -45,8 +46,12 @@ def readinpfile(inppath):
                 if line.split()[1]=='P1': P1 = 0.001*float(line.split()[0])
                 if line.split()[1]=='dt': dt = float(line.split()[0])
                 if line.split()[1]=='L': L = float(line.split()[0])
+                if line.split()[1]=='u': u = float(line.split()[0])
         inpfile.closed
-        u_isw = 1e3*L/dt
+        if u == 0:
+            u_isw = 1e3*L/dt
+        else:
+            u_isw = u
         composition = []
         while True:
                 line = inpfile.readline()              
@@ -256,6 +261,7 @@ frac2 = StringVar()
 frac3 = StringVar()
 frac4 = StringVar()
 frac5 = StringVar()
+Nexp_label = StringVar()
 
 ttk.Label(mainframe, text="input", font=capFont).grid(column=1, row=1, sticky=W)
 ttk.Label(mainframe, text="P1 = ").grid(column=1, row=2, sticky=E)
@@ -292,22 +298,20 @@ spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[0], justify=RIGHT)
 spec_entry.grid(column=1, columnspan =2,  row=9, pady=1, sticky=(W, E))
 frac_entry = ttk.Entry(mainframe, width=7, textvariable=frac[0])
 frac_entry.grid(column=3, row=9, pady=1, sticky=(W, E))
-
 spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[1], justify=RIGHT)
 spec_entry.grid(column=1, columnspan =2,  row=10, pady=1, sticky=(W, E))
-spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[2], justify=RIGHT)
-spec_entry.grid(column=1, columnspan =2,  row=11, pady=1, sticky=(W, E))
-spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[3], justify=RIGHT)
-spec_entry.grid(column=1, columnspan =2,  row=12, pady=1, sticky=(W, E))
-spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[4], justify=RIGHT)
-spec_entry.grid(column=1, columnspan =2,  row=13, pady=1, sticky=(W, E))
-
 frac_entry = ttk.Entry(mainframe, width=7, textvariable=frac[1])
 frac_entry.grid(column=3, row=10, pady=1, sticky=(W, E))
+spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[2], justify=RIGHT)
+spec_entry.grid(column=1, columnspan =2,  row=11, pady=1, sticky=(W, E))
 frac_entry = ttk.Entry(mainframe, width=7, textvariable=frac[2])
 frac_entry.grid(column=3, row=11, pady=1, sticky=(W, E))
+spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[3], justify=RIGHT)
+spec_entry.grid(column=1, columnspan =2,  row=12, pady=1, sticky=(W, E))
 frac_entry = ttk.Entry(mainframe, width=7, textvariable=frac[3])
 frac_entry.grid(column=3, row=12, pady=1, sticky=(W, E))
+spec_entry = ttk.Entry(mainframe, width=7, textvariable=spec[4], justify=RIGHT)
+spec_entry.grid(column=1, columnspan =2,  row=13, pady=1, sticky=(W, E))
 frac_entry = ttk.Entry(mainframe, width=7, textvariable=frac[4])
 frac_entry.grid(column=3, row=13, pady=1, sticky=(W, E))
 
@@ -391,6 +395,50 @@ def input_file_write(inppath, T1, P1, dt, L, u_isw, composition):
 
 def input_rewrite(T1, P1, dt, L, u_isw, composition):
     """write input labels from file"""
+    def nice_mix(composition):
+        for i in range(len(composition)):
+            if composition[i][0] in ('AR', 'HE', 'NE', 'KR'):
+                composition[i] , composition[-1] = composition[-1], composition[i]
+            if composition[i][0] in ('O2'):
+                composition[i] , composition[-2] = composition[-2], composition[i]
+        mixstring='for SW in '
+        for i in range(len(composition)):
+            if i>0:
+                mixstring=mixstring + ' + ' 
+            if composition[i][1] >= 0.1:
+                mixstring=mixstring+"{:.1f}".format(composition[i][1])+'% '+composition[i][0]
+            elif composition[i][1] >= 0.0001:
+                mixstring=mixstring+"{:.0f}".format(composition[i][1]*1e4)+'ppm '+composition[i][0]
+            else:
+                mixstring=mixstring+"{:.2f}".format(composition[i][1]*1e4)+'ppm '+composition[i][0]
+        submixstring = mixstring[0]
+        for i in range(len(mixstring)-1):
+            if (mixstring[i+1].isdigit()) and (submixstring[i] not in ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '.')):
+                if mixstring[i+1] == '0':
+                    submixstring = submixstring+'₀'
+                if mixstring[i+1] == '1':
+                    submixstring = submixstring+'₁'
+                if mixstring[i+1] == '2':
+                    submixstring = submixstring+'₂'
+                if mixstring[i+1] == '3':
+                    submixstring = submixstring+'₃'
+                if mixstring[i+1] == '4':
+                    submixstring = submixstring+'₄'
+                if mixstring[i+1] == '5':
+                    submixstring = submixstring+'₅'
+                if mixstring[i+1] == '6':
+                    submixstring = submixstring+'₆'
+                if mixstring[i+1] == '7':
+                    submixstring = submixstring+'₇'
+                if mixstring[i+1] == '8':
+                    submixstring = submixstring+'₈'
+                if mixstring[i+1] == '9':
+                    submixstring = submixstring+'₉'
+            else:
+                submixstring = submixstring+mixstring[i+1]
+        mixstring = submixstring
+        return mixstring
+
     P1_label.set(str(P1*1000))
     dt_label.set(str(dt))
     L_label.set(str(L))
@@ -402,12 +450,8 @@ def input_rewrite(T1, P1, dt, L, u_isw, composition):
         else:
             spec[i].set('')
             frac[i].set('')
-    mixstring='for SW in '
-    for i in range(len(composition)):
-        if i>0:
-            mixstring=mixstring + ' + ' 
-        mixstring=mixstring+"{:.1f}".format(composition[i][1])+'%'+composition[i][0]
-        mixture_label.set(mixstring)
+    mixstring = nice_mix(composition)
+    mixture_label.set(mixstring)
     return
 
 def output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
@@ -443,26 +487,108 @@ def change_flag(event, *args):
 
 def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac):
     """read input parameters from GUI"""
-    T1 = 273.15+float(T1_label.get())
-    P1 = 0.001*float(P1_label.get())
+    ok_flag = True
+    try:
+        T1 = 273.15+float(T1_label.get())
+    except ValueError:
+        status_label.set('ERROR: incorrect T1 value')
+        ok_flag = False
+    if (T1<200) or (T1>6000):
+        status_label.set('ERROR: extreme T1 value')
+        ok_flag = False
+    try:
+        P1 = 0.001*float(P1_label.get())
+    except ValueError:
+        status_label.set('ERROR: incorrect P1 value')
+        ok_flag = False
+    if (P1<=0):
+        status_label.set('ERROR: incorrect P1 value')
+        ok_flag = False
+
     if not (dt_label.get()==''):
-        dt = float(dt_label.get())
+        try:
+            dt = float(dt_label.get())
+        except ValueError:
+            status_label.set('ERROR: incorrect dt value')
+            ok_flag = False
+        if (dt<=0):
+            status_label.set('ERROR: incorrect dt value')
+            ok_flag = False
+
     if not (L_label.get()==''):
-        L = float(L_label.get())
+        try:
+            L = float(L_label.get())
+        except ValueError:
+            status_label.set('ERROR: incorrect L value')
+            ok_flag = False
+        if (dt<=0):
+            status_label.set('ERROR: incorrect L value')
+            ok_flag = False
+
+
     if not (u_label.get()==''):
-        u_isw = float(u_label.get())
+        try:
+            u_isw = float(u_label.get())
+        except ValueError:
+            status_label.set('ERROR: incorrect u value')
+            ok_flag = False
+        if (dt<=0):
+            status_label.set('ERROR: incorrect u value')
+            ok_flag = False
     else:
         u_isw = 1e3*L/dt
+
     composition = []
-    for i in range(4):
+    for i in range(5):
         if not (spec[i].get()==''):
-            composition.append([spec[i].get(), float(frac[i].get())])
-    return T1, P1, dt, L, u_isw, composition
+            if spec[i].get() not in specset:
+                status_label.set('ERROR: no \"' + spec[i].get()+ '\" in therm.dat')
+                ok_flag = False
+                continue
+            try:
+                composition.append([spec[i].get(), float(frac[i].get())])
+            except ValueError:
+                status_label.set('ERROR: incorrect \"' + spec[i].get()+ '\" fraction')
+                ok_flag = False
+
+    sum = 0
+    for i in range(len(composition)): sum = sum + composition[i][1]
+    for i in range(len(composition)): composition[i][1] = composition[i][1]*100/sum
+    
+    return T1, P1, dt, L, u_isw, composition, ok_flag
+
+
+def outfile_write(outpath, N_exp, T1, P1, dt, L, u_isw, composition):
+    """writes otuput data to equilib.dat"""
+    try:
+        outfile = open(outpath, 'r')
+    except:
+        open(outpath, 'w')
+        outfile.write('N_exp\t'+'P1\t'+'u_isw\t'+'T2\t'+'P2\t')
+    outfile.close
+    with open(outpath, 'a') as outfile:
+        outfile.write(N_exp+'\t')
+        outfile.write('{:.3f}'.format(P1)+'\t')
+        outfile.write('{:.0f}'.format(u_isw)+'\t')
+        outfile.write('{:.3f}'.format(M_isw)+'\t')          
+        inpfile.write(str(dt) + '\tdt [mks]'+'\n')
+        inpfile.write(str(L) + '\tL [mm]'+'\n')
+        inpfile.write('\n')
+        inpfile.write('MIXTURE'+'\n')
+        #for i in range(len(composition)):
+        #    if i+1 < len(composition):
+        #       inpfile.write(composition[i][0] + '\t' + str(composition[i][1])+'\n')
+        #   else:
+        #       inpfile.write(composition[i][0]+ '\t' + str(composition[i][1]))
+    outfile.close()
+    return    
 
 
 
 def restart(event, *args):
-    T1, P1, dt, L, u_isw, composition = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+    T1, P1, dt, L, u_isw, composition, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+    if not ok_flag:
+        return
     input_rewrite(T1, P1, dt, L, u_isw, composition)
     mixture = read_thermodat(composition, 'therm.dat')
     (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
@@ -475,13 +601,7 @@ def restart(event, *args):
 
     input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
     status_label.set('status: new')
-    print(composition, mixture[2].name, mixture[2].molefrac)
     return
-
-#def launch(event):
-    
-
-
 
 #mainbody start
 
@@ -490,7 +610,7 @@ specset = readlist('therm.dat')
 
 input_rewrite(T1, P1, dt, L, u_isw, composition)
 
-T1, P1, dt, L, u_isw, composition = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+T1, P1, dt, L, u_isw, composition, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
 
 mixture = read_thermodat(composition, 'therm.dat')
 (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
@@ -518,7 +638,7 @@ spec[4].trace("w", change_flag)
 frac[4].trace("w", change_flag)
 P1_label.trace("w", change_flag)
 
-root.bind("<Escape>", restart)
+root.bind("<Control-Return>", restart)
 
 #root.update()
 #root.minsize(root.winfo_width(), root.winfo_height())
