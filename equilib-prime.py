@@ -84,30 +84,25 @@ def read_thermodat(composition, file):
                 break			
         name = composition[i][0]
         molefrac = 0.01*composition[i][1]
-        weight = weightcalc(line[24:45])                #weight from elements
+        weight = weightcalc(line[24:45])     #weight from elements
         low_T = float(line[45:55])
         high_T = float(line[55:65])
         threeshold_T = float(line[65:73])
         a_high = [0,0,0,0,0,0,0]
         a_low = [0,0,0,0,0,0,0]
-        line = thermdat.readline() 						#2nd line
-        a_high[0] = float(line[0:15])
-        a_high[1] = float(line[15:30])
-        a_high[2] = float(line[30:45])
-        a_high[3] = float(line[45:60])
+        line = thermdat.readline() 			#2nd line
+        a_high[0] = float(line[0:15]);  a_high[1] = float(line[15:30])
+        a_high[2] = float(line[30:45]); a_high[3] = float(line[45:60])
         a_high[4] = float(line[60:75])
-        line = thermdat.readline() 						#3rd line
-        a_high[5] = float(line[0:15])
-        a_high[6] = float(line[15:30])
-        a_low[0] = float(line[30:45])
-        a_low[1] = float(line[45:60])
+        line = thermdat.readline() 			#3rd line
+        a_high[5] = float(line[0:15]); a_high[6] = float(line[15:30])
+        a_low[0] = float(line[30:45]); a_low[1] = float(line[45:60])
         a_low[2] = float(line[60:75])
-        line = thermdat.readline() 						#4th line
-        a_low[3] = float(line[0:15])
-        a_low[4] = float(line[15:30])
-        a_low[5] = float(line[30:45])
-        a_low[6] = float(line[45:60])
-        component = Species(name, molefrac, weight, low_T, threeshold_T,  high_T, a_low, a_high)
+        line = thermdat.readline() 			#4th line
+        a_low[3] = float(line[0:15]); a_low[4] = float(line[15:30])
+        a_low[5] = float(line[30:45]);a_low[6] = float(line[45:60])
+        component = Species(name, molefrac, weight, low_T,
+                            threeshold_T,  high_T, a_low, a_high)
         mixture.append(component)
     return mixture
 
@@ -158,6 +153,7 @@ def T_from_enthalpy(mixture, H):
     return T
     
 def mixweight(mixture):
+    """mean molecular weight of mixture in a.m.u."""
     weight = 0
     for i in range(len(mixture)):
         weight = weight + mixture[i].molefrac*mixture[i].weight
@@ -166,8 +162,8 @@ def mixweight(mixture):
 def ISW(mixture, P0, T0, u_isw):
     """parameters behind incident wave"""
     gamma1 = gamma(mixture, T0)
-    weight = mixweight(mixture)/1000
-    a0 = (gamma1*T0*R/weight)**0.5
+    weight = mixweight(mixture)/1000    #a.m.u. to kg/mole (SI)
+    a0 = (gamma1*T0*R/weight)**0.5  
     M_isw = u_isw/a0;
     rratio_isw = (gamma1+1)/(gamma1-1)
     Pa, Pb = 1, 2
@@ -234,7 +230,7 @@ def RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw):
 
 #interface_initialization
 root = Tk()
-root.title("EQUILIB Prime")
+root.title("EQUILIB Prime BETA TEST")
 root.iconbitmap('oivticon.ico')
 
 capFont = font.Font(family="Helvetica",size=16)
@@ -246,22 +242,10 @@ mainframe.grid(column=0, row=0, sticky=(N, W, E, S))
 root.columnconfigure(0, weight=1)
 root.rowconfigure(0, weight=1)
 
-L_label = StringVar()
-dt_label = StringVar()
-u_label = StringVar()
-P1_label = StringVar()
-T1_label = StringVar()
-spec1 = StringVar()
-spec2 = StringVar()
-spec3 = StringVar()
-spec4 = StringVar()
-spec5 = StringVar()
-frac1 = StringVar()
-frac2 = StringVar()
-frac3 = StringVar()
-frac4 = StringVar()
-frac5 = StringVar()
-Nexp_label = StringVar()
+L_label = StringVar(); dt_label = StringVar(); u_label = StringVar();
+P1_label = StringVar();T1_label = StringVar(); N_exp_label = StringVar()
+spec = [StringVar(), StringVar(), StringVar(), StringVar(), StringVar()]
+frac = [StringVar(), StringVar(), StringVar(), StringVar(), StringVar()]
 
 ttk.Label(mainframe, text="input", font=capFont).grid(column=1, row=1, sticky=W)
 ttk.Label(mainframe, text="P1 = ").grid(column=1, row=2, sticky=E)
@@ -288,9 +272,6 @@ u_entry.grid(column=2, row=6, pady=5, sticky=(W, E))
 
 s1 = ttk.Separator(mainframe, orient=HORIZONTAL)
 s1.grid(column=1, columnspan=3, pady = 0, row=7, sticky=(W, E))
-
-spec = [spec1, spec2, spec3, spec4, spec5]
-frac = [frac1, frac2, frac3, frac4, frac5]
 
 ttk.Label(mainframe, text="Mixture Species").grid(column=1, row=8, sticky=W, columnspan =2)
 ttk.Label(mainframe, text="Fraction").grid(column=3, row=8, sticky=W)
@@ -319,24 +300,12 @@ s2 = ttk.Separator(mainframe, orient=VERTICAL)
 s2.grid(column=4, row=1, rowspan=12, padx=5, sticky=(N, S))
 
 mixture_label = StringVar()
-T_isw_label = StringVar()
-P_isw_label = StringVar()
-u_isw_label = StringVar()
-M_isw_label = StringVar()
-n_isw_label = StringVar()
-rratio_isw_label = StringVar()
-a_isw_label = StringVar()
-a_rsw_label = StringVar()
-tratio_isw_label = StringVar()
-T_rsw_label = StringVar()
-P_rsw_label = StringVar()
-u_rsw_label = StringVar()
-M_rsw_label = StringVar()
-n_rsw_label = StringVar()
-rratio_rsw_label = StringVar()
-status_label = StringVar()
-flag_color = StringVar()
-N_exp_label = StringVar()
+T_isw_label = StringVar(); P_isw_label = StringVar(); u_isw_label = StringVar()
+M_isw_label = StringVar(); n_isw_label = StringVar(); rratio_isw_label = StringVar()
+a_isw_label = StringVar(); a_rsw_label = StringVar(); tratio_isw_label = StringVar()
+T_rsw_label = StringVar(); P_rsw_label = StringVar(); u_rsw_label = StringVar()
+M_rsw_label = StringVar(); n_rsw_label = StringVar(); rratio_rsw_label = StringVar()
+status_label = StringVar(); flag_color = StringVar(); N_exp_label = StringVar()
 
 flag_color.set('black')
 
@@ -485,7 +454,7 @@ def change_flag(event, *args):
     status_label.set('Input changed. Press Ctrl+Enter to recalculate')
     return
 
-def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac):
+def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp_label):
     """read input parameters from GUI"""
     ok_flag = True
     try:
@@ -551,30 +520,39 @@ def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac):
                 status_label.set('ERROR: incorrect \"' + spec[i].get()+ '\" fraction')
                 ok_flag = False
 
+      
     sum = 0
     for i in range(len(composition)): sum = sum + composition[i][1]
     for i in range(len(composition)): composition[i][1] = composition[i][1]*100/sum
+
+    N_exp = N_exp_label.get()
     
-    return T1, P1, dt, L, u_isw, composition, ok_flag
+    return T1, P1, dt, L, u_isw, composition, N_exp, ok_flag
 
 
-def outfile_write(outpath, N_exp, T1, P1, dt, L, u_isw, composition):
+def outfile_write(outpath, N_exp, P1,  u_isw, T1, P_isw, T_isw, P_rsw, T_rsw, rratio_isw, rratio_rsw, composition):
     """writes otuput data to equilib.dat"""
+    
     try:
         outfile = open(outpath, 'r')
     except:
-        open(outpath, 'w')
-        outfile.write('N_exp\t'+'P1\t'+'u_isw\t'+'T2\t'+'P2\t')
+        outfile = open(outpath, 'w')
+        outfile.write('N_exp '+' P1   '+'u_isw  '+' T2   '+' P2   '+' T5   '+' P5   '+'ro2ro1 '+'ro5ro1 '+'   n1    '+'   n2     '+'   n5     ')
     outfile.close
     with open(outpath, 'a') as outfile:
-        outfile.write(N_exp+'\t')
-        outfile.write('{:.3f}'.format(P1)+'\t')
-        outfile.write('{:.0f}'.format(u_isw)+'\t')
-        outfile.write('{:.3f}'.format(M_isw)+'\t')          
-        inpfile.write(str(dt) + '\tdt [mks]'+'\n')
-        inpfile.write(str(L) + '\tL [mm]'+'\n')
-        inpfile.write('\n')
-        inpfile.write('MIXTURE'+'\n')
+        outfile.write('\n'+(N_exp+10*' ')[:6])
+        outfile.write(('{:.3f}'.format(P1)+10*' ')[:7])
+        outfile.write(('{:.0f}'.format(u_isw)+10*' ')[:6])
+        outfile.write(('{:.0f}'.format(T_isw)+3*' ')[:6])
+        outfile.write(('{:.3f}'.format(P_isw)+3*' ')[:6])
+        outfile.write(('{:.0f}'.format(T_rsw)+3*' ')[:6])
+        outfile.write(('{:.3f}'.format(P_rsw)+3*' ')[:6])
+        outfile.write(('{:.3f}'.format(rratio_isw)+4*' ')[:7])
+        outfile.write(('{:.3f}'.format(rratio_rsw*rratio_isw)+4*' ')[:7])
+        outfile.write(('{:.3e}'.format(P1*1e-1/(k*T1))+4*' ')[:10])
+        outfile.write(('{:.3e}'.format(P_isw*1e-1/(k*T_isw))+4*' ')[:10])
+        outfile.write(('{:.3e}'.format(P_rsw*1e-1/(k*T_rsw))+4*' ')[:10])
+        #outfile.write('{:.3f}'.format(M_isw)+'\t')          
         #for i in range(len(composition)):
         #    if i+1 < len(composition):
         #       inpfile.write(composition[i][0] + '\t' + str(composition[i][1])+'\n')
@@ -583,10 +561,9 @@ def outfile_write(outpath, N_exp, T1, P1, dt, L, u_isw, composition):
     outfile.close()
     return    
 
-
-
 def restart(event, *args):
-    T1, P1, dt, L, u_isw, composition, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+    """recalculation on Ctrl+Enter"""
+    T1, P1, dt, L, u_isw, composition, N_exp, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp_label)
     if not ok_flag:
         return
     input_rewrite(T1, P1, dt, L, u_isw, composition)
@@ -597,10 +574,15 @@ def restart(event, *args):
     output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
               T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw)
 
-    print(T_rsw)
+    status_label.set('status: Ok')
 
+    if not (N_exp == ''):
+        outfile_write('equilib.dat',  N_exp, P1,  u_isw, T1, P_isw, T_isw, P_rsw, T_rsw, rratio_isw, rratio_rsw, composition)
+        N_exp_label.set('')
+        status_label.set('status: Ok\t \''+ N_exp+'\' was written to equilib.out')
+                
     input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
-    status_label.set('status: new')
+
     return
 
 #mainbody start
@@ -610,7 +592,7 @@ specset = readlist('therm.dat')
 
 input_rewrite(T1, P1, dt, L, u_isw, composition)
 
-T1, P1, dt, L, u_isw, composition, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac)
+T1, P1, dt, L, u_isw, composition, N_exp, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp_label)
 
 mixture = read_thermodat(composition, 'therm.dat')
 (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
@@ -621,24 +603,17 @@ output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
 
 input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
 
-P1_label.trace("w", change_flag)
-T1_label.trace("w", change_flag)
-L_label.trace("w", change_flag)
-dt_label.trace("w", change_flag)
-u_label.trace("w", change_flag)
-spec[0].trace("w", change_flag)
-frac[0].trace("w", change_flag)
-spec[1].trace("w", change_flag)
-frac[1].trace("w", change_flag)
-spec[2].trace("w", change_flag)
-frac[2].trace("w", change_flag)
-spec[3].trace("w", change_flag)
-frac[3].trace("w", change_flag)
-spec[4].trace("w", change_flag)
-frac[4].trace("w", change_flag)
-P1_label.trace("w", change_flag)
+P1_label.trace("w", change_flag); T1_label.trace("w", change_flag)
+L_label.trace("w", change_flag); dt_label.trace("w", change_flag)
+u_label.trace("w", change_flag); N_exp_label.trace("w", change_flag)
+frac[0].trace("w", change_flag); spec[0].trace("w", change_flag)
+frac[1].trace("w", change_flag); spec[1].trace("w", change_flag)
+frac[2].trace("w", change_flag); spec[2].trace("w", change_flag)
+frac[3].trace("w", change_flag); spec[3].trace("w", change_flag)
+frac[4].trace("w", change_flag); spec[4].trace("w", change_flag)
 
 root.bind("<Control-Return>", restart)
+root.bind("<Escape>", closeapp)
 
 #root.update()
 #root.minsize(root.winfo_width(), root.winfo_height())
