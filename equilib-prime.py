@@ -4,7 +4,8 @@ from tkinter import font
 
 class Species:
     """class of mixture components"""
-    def __init__(self, name, molefrac, weight, low_T, threeshold_T,  high_T, a_low, a_high):
+    def __init__(self, name, molefrac, weight, low_T,
+                 threeshold_T,  high_T, a_low, a_high):
         self.name = name
         self.molefrac = molefrac
         self.weight = weight
@@ -18,7 +19,7 @@ R = 8.31446 #ideal gas constant
 k = 1.3806e-23 #Boltzmann consant
 
 def readlist(thermpath):
-    """makes list of available gaseous species from therm.dat"""
+    """makes set of available gaseous species from therm.dat"""
     specset = set()
     with open(thermpath, 'r') as thermdat:
         while True:
@@ -29,7 +30,6 @@ def readlist(thermpath):
             if line == '':
                 break
     thermdat.closed
-    #print(elemset)
     return specset
 
 def readinpfile(inppath):
@@ -139,6 +139,10 @@ def T_from_enthalpy(mixture, H):
     T = 250
     dT = 200
     sign = 1
+    T_limit = 6000
+    for i in range(len(mixture)):
+        if mixture[i].high_T < T_limit:
+            T_limit = mixture[i].high_T
     while abs(H-enthalpy(mixture, T)) >= 0.01:
         if H-enthalpy(mixture, T) > 0:
             if sign == -1:
@@ -150,6 +154,8 @@ def T_from_enthalpy(mixture, H):
                sign = -1
                dT = dT/2
             T = T - dT
+        if T>=T_limit:
+            return T_limit
     return T
     
 def mixweight(mixture):
@@ -165,13 +171,23 @@ def ISW(mixture, P0, T0, u_isw):
     weight = mixweight(mixture)/1000    #a.m.u. to kg/mole (SI)
     a0 = (gamma1*T0*R/weight)**0.5  
     M_isw = u_isw/a0;
+    if M_isw<=1:
+        status_label.set('ERROR: ISW velocity too low, no shock')
+        return 1, 1, 1, 1, 1, 1, 1, 1, False
     rratio_isw = (gamma1+1)/(gamma1-1)
     Pa, Pb = 1, 2
     js = 1
     dr = 0.01*rratio_isw;
+    T_limit = 6000
+    for i in range(len(mixture)):
+        if mixture[i].high_T < T_limit:
+            T_limit = mixture[i].high_T
     while abs(Pa-Pb)>=5E-6:
         H2 = enthalpy(mixture, T0)+(0.5*u_isw**2*(1-(1/rratio_isw)**2))*weight
         T_isw = T_from_enthalpy(mixture, H2)
+        if T_isw >= T_limit:
+            status_label.set('ERROR: SW too fast, T₂ exceed limit')
+            return 1, 1, 1, 1, 1, 1, 1, 1, False
         Pa = rratio_isw*T_isw/T0
         Pb = 1+(u_isw**2*weight/(T0*R))*(1-1/rratio_isw);
         if ((Pa>Pb) and (js<0)) or ((Pa<Pb) and (js>0)):
@@ -187,23 +203,29 @@ def ISW(mixture, P0, T0, u_isw):
     gamma2 = gamma(mixture, T_isw)
     a_isw = (gamma2*T_isw*R/weight)**0.5
     tratio_isw = rratio_isw
-    return T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw
+    return T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw, True
     
     
 def RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw):
     """parameters behind reflected wave"""
+    ok_flag = True
     gamma1 = gamma(mixture, T1)
     weight = mixweight(mixture)/1000
     a1 = (gamma1*T1*R/weight)**0.5;
-    print ('a1=', a1, gamma1, T1, R, weight)
     M_isw = u_isw/a1;
     Ta = T1*(2*(gamma1-1)*M_isw**2+3-gamma1)*(M_isw**2*(3*gamma1-1)-2*gamma1+2)/((gamma1+1)*M_isw)**2
     Tb = T_isw
     dT = 1
     js = 1
     H2 = enthalpy(mixture, T_isw)
-    print(T_isw, P_isw)
+    T_limit = 6000
+    for i in range(len(mixture)):
+        if mixture[i].high_T < T_limit:
+            T_limit = mixture[i].high_T
     while abs(Ta-Tb)>=1E-5:
+        if Ta > T_limit:
+            status_label.set('ERROR: wave too fast, T₅ exceed limit')
+            return 1, 1, 1, 1, 1, 1, 1, False
         H5 = enthalpy(mixture, Ta)
         s0 = 0.5*(u_isw*(1-1/rratio_isw))**2
         s1 = (H5-H2)/weight
@@ -226,11 +248,11 @@ def RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw):
     a_isw = (gamma2*T_isw*R/weight)**0.5
     a_rsw = (gamma5*T_rsw*R/weight)**0.5
     M_rsw = u_rsw_self/a_isw 
-    return T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw_lab, a_rsw, M_rsw
+    return T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw_lab, a_rsw, M_rsw, ok_flag
 
 #interface_initialization
 root = Tk()
-root.title("EQUILIB Prime BETA TEST")
+root.title("EQUILIB Prime")
 root.iconbitmap('oivticon.ico')
 
 capFont = font.Font(family="Helvetica",size=16)
@@ -444,13 +466,24 @@ def output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_
     status_label.set('status: ok')
     return
 
+def output_fail():
+    """rewrite output labels stubs if calculatuion failed"""
+    T_isw_label.set('T₂ =  . . . . .  K'); P_isw_label.set('P₂ =  . . . . .  bar')
+    n_isw_label.set('n₂ = ..... cm⁻³'); rratio_isw_label.set('ρ₂/ρ₁ = .....')
+    u_isw_label.set('u₂ = ..... m/s'); M_isw_label.set('M₂ = .....')
+    a_isw_label.set('a₂ = ..... m/s'); tratio_isw_label.set('τ = ..... t')
+    T_rsw_label.set('T₅ =  . . . . .  K'); P_rsw_label.set('P₅ = . . . . . bar')
+    n_rsw_label.set('n₅ = ..... cm⁻³'); rratio_rsw_label.set('ρ₅/ρ₁ = .....')
+    u_rsw_label.set('u₅ = ..... m/s'); M_rsw_label.set('M₅ = .....')
+    a_rsw_label.set('a₅ = ..... m/s')
+    return
+
 def closeapp(event, *args):
     global root
     root.destroy()
     return
     
 def change_flag(event, *args):
-    flag_color.set('red')
     status_label.set('Input changed. Press Ctrl+Enter to recalculate')
     return
 
@@ -460,50 +493,40 @@ def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp
     try:
         T1 = 273.15+float(T1_label.get())
     except ValueError:
-        status_label.set('ERROR: incorrect T1 value')
-        ok_flag = False
+        status_label.set('ERROR: incorrect T1 value'); ok_flag = False
     if (T1<200) or (T1>6000):
-        status_label.set('ERROR: extreme T1 value')
-        ok_flag = False
+        status_label.set('ERROR: extreme T1 value'); ok_flag = False
     try:
         P1 = 0.001*float(P1_label.get())
     except ValueError:
-        status_label.set('ERROR: incorrect P1 value')
-        ok_flag = False
+        status_label.set('ERROR: incorrect P1 value'); ok_flag = False
     if (P1<=0):
-        status_label.set('ERROR: incorrect P1 value')
-        ok_flag = False
+        status_label.set('ERROR: incorrect P1 value'); ok_flag = False
 
     if not (dt_label.get()==''):
         try:
             dt = float(dt_label.get())
         except ValueError:
-            status_label.set('ERROR: incorrect dt value')
-            ok_flag = False
+            status_label.set('ERROR: incorrect dt value'); ok_flag = False
         if (dt<=0):
-            status_label.set('ERROR: incorrect dt value')
-            ok_flag = False
+            status_label.set('ERROR: incorrect dt value'); ok_flag = False
 
     if not (L_label.get()==''):
         try:
             L = float(L_label.get())
         except ValueError:
-            status_label.set('ERROR: incorrect L value')
-            ok_flag = False
-        if (dt<=0):
-            status_label.set('ERROR: incorrect L value')
-            ok_flag = False
+            status_label.set('ERROR: incorrect L value'); ok_flag = False
+        if (L<=0):
+            status_label.set('ERROR: incorrect L value'); ok_flag = False
 
 
     if not (u_label.get()==''):
         try:
             u_isw = float(u_label.get())
         except ValueError:
-            status_label.set('ERROR: incorrect u value')
-            ok_flag = False
-        if (dt<=0):
-            status_label.set('ERROR: incorrect u value')
-            ok_flag = False
+            status_label.set('ERROR: incorrect u value'); ok_flag = False
+        if (u_isw<=0):
+            status_label.set('ERROR: incorrect u value'); ok_flag = False
     else:
         u_isw = 1e3*L/dt
 
@@ -532,12 +555,12 @@ def readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp
 
 def outfile_write(outpath, N_exp, P1,  u_isw, T1, P_isw, T_isw, P_rsw, T_rsw, rratio_isw, rratio_rsw, composition):
     """writes otuput data to equilib.dat"""
-    
     try:
         outfile = open(outpath, 'r')
     except:
         outfile = open(outpath, 'w')
-        outfile.write('N_exp '+' P1   '+'u_isw  '+' T2   '+' P2   '+' T5   '+' P5   '+'ro2ro1 '+'ro5ro1 '+'   n1    '+'   n2     '+'   n5     ')
+        outfile.write('N_exp '+' P1   '+'u_isw  '+' T2   '+' P2   '+' T5   '+
+                      ' P5   '+'ro2ro1 '+'ro5ro1 '+'   n1    '+'   n2     '+'   n5')
     outfile.close
     with open(outpath, 'a') as outfile:
         outfile.write('\n'+(N_exp+10*' ')[:6])
@@ -552,12 +575,6 @@ def outfile_write(outpath, N_exp, P1,  u_isw, T1, P_isw, T_isw, P_rsw, T_rsw, rr
         outfile.write(('{:.3e}'.format(P1*1e-1/(k*T1))+4*' ')[:10])
         outfile.write(('{:.3e}'.format(P_isw*1e-1/(k*T_isw))+4*' ')[:10])
         outfile.write(('{:.3e}'.format(P_rsw*1e-1/(k*T_rsw))+4*' ')[:10])
-        #outfile.write('{:.3f}'.format(M_isw)+'\t')          
-        #for i in range(len(composition)):
-        #    if i+1 < len(composition):
-        #       inpfile.write(composition[i][0] + '\t' + str(composition[i][1])+'\n')
-        #   else:
-        #       inpfile.write(composition[i][0]+ '\t' + str(composition[i][1]))
     outfile.close()
     return    
 
@@ -568,14 +585,15 @@ def restart(event, *args):
         return
     input_rewrite(T1, P1, dt, L, u_isw, composition)
     mixture = read_thermodat(composition, 'therm.dat')
-    (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
-    (T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
-
-    output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
+    (T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw, ok_flag) = ISW(mixture, P1, T1, u_isw)
+    if ok_flag:
+        (T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw, ok_flag) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
+    if not ok_flag:
+        output_fail()
+    else:
+        output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
               T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw)
-
-    status_label.set('status: Ok')
-
+           
     if not (N_exp == ''):
         outfile_write('equilib.dat',  N_exp, P1,  u_isw, T1, P_isw, T_isw, P_rsw, T_rsw, rratio_isw, rratio_rsw, composition)
         N_exp_label.set('')
@@ -595,13 +613,15 @@ input_rewrite(T1, P1, dt, L, u_isw, composition)
 T1, P1, dt, L, u_isw, composition, N_exp, ok_flag = readGUIinp(T1_label, P1_label, dt_label, L_label, u_label, spec, frac, N_exp_label)
 
 mixture = read_thermodat(composition, 'therm.dat')
-(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw) = ISW(mixture, P1, T1, u_isw)
-(T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
 
-output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
+(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw, ok_flag) = ISW(mixture, P1, T1, u_isw)
+if ok_flag:
+    (T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw, ok_flag) = RSW(mixture, T1, P1, u_isw, T_isw, rratio_isw)
+if not ok_flag:
+    output_fail()
+else:
+    output_rewrite(T_isw, P_isw, n_isw, rratio_isw, u_isw, a_isw, M_isw, tratio_isw,
               T_rsw, P_rsw, n_rsw, rratio_rsw, u_rsw, a_rsw, M_rsw)
-
-input_file_write('equilib.inp', T1, P1, dt, L, u_isw, composition)
 
 P1_label.trace("w", change_flag); T1_label.trace("w", change_flag)
 L_label.trace("w", change_flag); dt_label.trace("w", change_flag)
@@ -614,9 +634,6 @@ frac[4].trace("w", change_flag); spec[4].trace("w", change_flag)
 
 root.bind("<Control-Return>", restart)
 root.bind("<Escape>", closeapp)
-
-#root.update()
-#root.minsize(root.winfo_width(), root.winfo_height())
 
 root.mainloop()
 
