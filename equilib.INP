@@ -1,8 +1,8 @@
 20.0	T1 [C]
-101.0	P1 [mbar]
-334.0	dt [mks]
-95.0	L [mm]
+73.0	P1 [mbar]
+507.6	dt [mks]
+435.0	L [mm]
 
 MIXTURE
-HE	50.0
-AR	50.0
+CH3OCH3	3.0
+AR	97.0
